@@ -8,29 +8,38 @@ using ClaudeAutoResponse.Models;
 namespace ClaudeAutoResponse.Services
 {
     /// <summary>
-    /// Sends keystrokes to auto-approve Claude Code permission prompts.
-    /// When mode is enabled, sends '1' (Yes) or '2' (Yes Always) every second.
-    /// If no prompt is visible, the keystroke does nothing (harmless).
+    /// Auto-approves Claude Code permission prompts by sending keystroke '1' (Yes).
+    /// - Foreground: Direct SendInput (instant, no flicker)
+    /// - Background: Quick focus switch with retry (brief flicker ~150ms)
     /// </summary>
     public class PermissionMonitorService : IDisposable
     {
         [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
-        [DllImport("user32.dll")]
-        private static extern short VkKeyScan(char ch);
-
-        private const uint INPUT_KEYBOARD = 1;
+        private const int INPUT_KEYBOARD = 1;
         private const uint KEYEVENTF_KEYUP = 0x0002;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct INPUT
         {
-            public uint type;
-            public KEYBDINPUT ki;
+            public int type;
+            public INPUTUNION u;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        private struct INPUTUNION
+        {
+            [FieldOffset(0)] public KEYBDINPUT ki;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -41,8 +50,6 @@ namespace ClaudeAutoResponse.Services
             public uint dwFlags;
             public uint time;
             public IntPtr dwExtraInfo;
-            public uint padding1;
-            public uint padding2;
         }
 
         private readonly DispatcherTimer _timer;
@@ -65,7 +72,7 @@ namespace ClaudeAutoResponse.Services
         public void Start()
         {
             _timer.Start();
-            StatusChanged?.Invoke(this, "Active - sending keystrokes");
+            StatusChanged?.Invoke(this, "Active");
         }
 
         public void Stop()
@@ -92,51 +99,113 @@ namespace ClaudeAutoResponse.Services
             if (windowsToProcess.Count == 0)
                 return;
 
-            var foreground = GetForegroundWindow();
-
             foreach (var window in windowsToProcess)
             {
-                // Only send keystroke if this window is in foreground
-                if (foreground != window.Handle)
+                // Check if window still exists
+                if (!IsWindow(window.Handle))
                     continue;
 
-                // Send the appropriate keystroke
-                char key = window.Mode == AutoResponseMode.YesAlways ? '2' : '1';
-                SendKeystroke(key);
+                var currentForeground = GetForegroundWindow();
+                bool isForeground = (currentForeground == window.Handle);
 
-                var action = key == '2' ? "2 (Yes Always)" : "1 (Yes)";
-                StatusChanged?.Invoke(this, $"Sent: {action}");
-
-                // Only process one window per tick
-                break;
+                if (isForeground)
+                {
+                    // Already in foreground - just send keystroke directly
+                    SendKeystroke('1');
+                    StatusChanged?.Invoke(this, $"Sent: 1 (Yes) - {DateTime.Now:HH:mm:ss}");
+                }
+                else
+                {
+                    // Background - quick focus switch with retry
+                    bool success = QuickFocusSwitchAndSend(window.Handle, currentForeground);
+                    if (success)
+                    {
+                        StatusChanged?.Invoke(this, $"Sent: 1 (Yes) [bg] - {DateTime.Now:HH:mm:ss}");
+                    }
+                }
             }
+        }
+
+        private bool QuickFocusSwitchAndSend(IntPtr targetWindow, IntPtr originalForeground)
+        {
+            const int MAX_RETRIES = 3;
+            const int FOCUS_DELAY_MS = 100;
+
+            for (int retry = 0; retry < MAX_RETRIES; retry++)
+            {
+                // Bring target window to foreground
+                SetForegroundWindow(targetWindow);
+                System.Threading.Thread.Sleep(FOCUS_DELAY_MS);
+
+                // Verify focus actually changed
+                if (GetForegroundWindow() == targetWindow)
+                {
+                    // Send keystroke
+                    SendKeystroke('1');
+                    System.Threading.Thread.Sleep(50);
+
+                    // Restore original foreground window
+                    if (originalForeground != IntPtr.Zero && originalForeground != targetWindow)
+                    {
+                        SetForegroundWindow(originalForeground);
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"QuickFocusSwitch succeeded on retry {retry}");
+                    return true;
+                }
+
+                System.Threading.Thread.Sleep(50); // Brief wait before retry
+            }
+
+            System.Diagnostics.Debug.WriteLine("QuickFocusSwitch failed after all retries");
+            return false;
         }
 
         private void SendKeystroke(char key)
         {
             try
             {
-                // Get virtual key code for the character
-                short vk = VkKeyScan(key);
-                if (vk == -1)
-                    return;
+                // Virtual key code for '1' is 0x31
+                ushort vkCode = (ushort)key;
 
-                ushort virtualKey = (ushort)(vk & 0xFF);
-
-                INPUT[] inputs = new INPUT[2];
+                var inputs = new INPUT[2];
 
                 // Key down
-                inputs[0].type = INPUT_KEYBOARD;
-                inputs[0].ki.wVk = virtualKey;
-                inputs[0].ki.dwFlags = 0;
+                inputs[0] = new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = vkCode,
+                            wScan = 0,
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        }
+                    }
+                };
 
                 // Key up
-                inputs[1].type = INPUT_KEYBOARD;
-                inputs[1].ki.wVk = virtualKey;
-                inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                inputs[1] = new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = vkCode,
+                            wScan = 0,
+                            dwFlags = KEYEVENTF_KEYUP,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        }
+                    }
+                };
 
                 uint result = SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
-                System.Diagnostics.Debug.WriteLine($"Sent keystroke '{key}', result: {result}");
+                System.Diagnostics.Debug.WriteLine($"SendInput '{key}', result: {result}");
             }
             catch (Exception ex)
             {

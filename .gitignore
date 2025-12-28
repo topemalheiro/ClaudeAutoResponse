@@ -6,3 +6,12 @@ obj/
 *.cache
 *.log
 test_prompt.txt
+
+# Windows reserved device names
+nul
+NUL
+
+# Test files
+*_test.txt
+*test*.txt
+test_*.txt
