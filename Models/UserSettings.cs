@@ -11,6 +11,20 @@ namespace ClaudeAutoResponse.Models
         public int PollingIntervalMs { get; set; } = 500;
         public bool StartMinimized { get; set; } = true;
 
+        /// <summary>
+        /// Whether to enable RDR (Recover Debug Resend) signal file monitoring
+        /// </summary>
+        public bool RdrEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Project paths to monitor for RDR signal files (.auto-claude/rdr-pending.json)
+        /// </summary>
+        public string[] RdrProjectPaths { get; set; } = new[]
+        {
+            @"C:\Users\topem\Desktop\CV Project",
+            @"C:\Users\topem\source\repos\Auto-Claude Mod"
+        };
+
         private static readonly string SettingsPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "ClaudeAutoResponse",

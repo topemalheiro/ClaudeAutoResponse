@@ -213,6 +213,126 @@ namespace ClaudeAutoResponse.Services
             }
         }
 
+        /// <summary>
+        /// Sends a message to Claude Code by pasting from clipboard and pressing Enter.
+        /// Used by RDR signal processing to trigger Claude Code to check batches.
+        /// </summary>
+        public bool SendMessageToClaudeCode(string message, IntPtr targetWindow)
+        {
+            if (!IsWindow(targetWindow))
+            {
+                StatusChanged?.Invoke(this, "SendMessage: Target window no longer valid");
+                return false;
+            }
+
+            var currentForeground = GetForegroundWindow();
+            bool isForeground = (currentForeground == targetWindow);
+
+            try
+            {
+                // Copy message to clipboard (must be on STA thread)
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    System.Windows.Clipboard.SetText(message);
+                });
+
+                if (!isForeground)
+                {
+                    // Bring target window to foreground
+                    SetForegroundWindow(targetWindow);
+                    System.Threading.Thread.Sleep(150);
+
+                    // Verify focus changed
+                    if (GetForegroundWindow() != targetWindow)
+                    {
+                        StatusChanged?.Invoke(this, "SendMessage: Failed to focus target window");
+                        return false;
+                    }
+                }
+
+                // Wait a bit for window to be ready
+                System.Threading.Thread.Sleep(100);
+
+                // Send Ctrl+V to paste
+                SendCtrlV();
+                System.Threading.Thread.Sleep(100);
+
+                // Send Enter to submit
+                SendEnter();
+                System.Threading.Thread.Sleep(50);
+
+                // Restore original foreground if we switched
+                if (!isForeground && currentForeground != IntPtr.Zero && currentForeground != targetWindow)
+                {
+                    System.Threading.Thread.Sleep(100);
+                    SetForegroundWindow(currentForeground);
+                }
+
+                StatusChanged?.Invoke(this, $"SendMessage: Sent to Claude Code - {DateTime.Now:HH:mm:ss}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SendMessageToClaudeCode failed: {ex.Message}");
+                StatusChanged?.Invoke(this, $"SendMessage: Failed - {ex.Message}");
+                return false;
+            }
+        }
+
+        private void SendCtrlV()
+        {
+            const ushort VK_CONTROL = 0x11;
+            const ushort VK_V = 0x56;
+
+            var inputs = new INPUT[4];
+
+            // Ctrl down
+            inputs[0] = CreateKeyInput(VK_CONTROL, false);
+            // V down
+            inputs[1] = CreateKeyInput(VK_V, false);
+            // V up
+            inputs[2] = CreateKeyInput(VK_V, true);
+            // Ctrl up
+            inputs[3] = CreateKeyInput(VK_CONTROL, true);
+
+            uint result = SendInput(4, inputs, Marshal.SizeOf(typeof(INPUT)));
+            System.Diagnostics.Debug.WriteLine($"SendCtrlV result: {result}");
+        }
+
+        private void SendEnter()
+        {
+            const ushort VK_RETURN = 0x0D;
+
+            var inputs = new INPUT[2];
+
+            // Enter down
+            inputs[0] = CreateKeyInput(VK_RETURN, false);
+            // Enter up
+            inputs[1] = CreateKeyInput(VK_RETURN, true);
+
+            uint result = SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
+            System.Diagnostics.Debug.WriteLine($"SendEnter result: {result}");
+        }
+
+        private INPUT CreateKeyInput(ushort vkCode, bool keyUp)
+        {
+            return new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                u = new INPUTUNION
+                {
+                    ki = new KEYBDINPUT
+                    {
+                        wVk = vkCode,
+                        wScan = 0,
+                        dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
+                        time = 0,
+                        dwExtraInfo = IntPtr.Zero
+                    }
+                }
+            };
+        }
+
         public void Dispose()
         {
             _timer.Stop();

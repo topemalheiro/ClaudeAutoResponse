@@ -13,6 +13,7 @@ namespace ClaudeAutoResponse
         private TrayIconService? _trayIcon;
         private GlobalHotkeyService? _hotkeyService;
         private PermissionMonitorService? _monitorService;
+        private RdrSignalService? _rdrService;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -62,11 +63,30 @@ namespace ClaudeAutoResponse
 
             _monitorService.Start();
 
+            // Load settings
+            var settings = UserSettings.Load();
+
+            // Initialize RDR signal service (if enabled)
+            if (settings.RdrEnabled && settings.RdrProjectPaths.Length > 0)
+            {
+                _rdrService = new RdrSignalService(_monitorService, trackedWindows);
+                _rdrService.StatusChanged += (s, msg) =>
+                {
+                    Dispatcher.Invoke(() => _mainWindow.ViewModel.UpdateStatus(msg));
+                    // Show balloon for RDR events
+                    if (msg.Contains("Active") || msg.Contains("Sent"))
+                    {
+                        _trayIcon?.ShowBalloon("RDR Signal", msg);
+                    }
+                };
+                _rdrService.Start(settings.RdrProjectPaths);
+            }
+
             // Update tray tooltip
-            _trayIcon.UpdateTooltip("Claude Auto-Response - Running");
+            var rdrStatus = _rdrService != null ? " + RDR" : "";
+            _trayIcon.UpdateTooltip($"Claude Auto-Response - Running{rdrStatus}");
 
             // Show window if not starting minimized
-            var settings = UserSettings.Load();
             if (!settings.StartMinimized)
             {
                 ShowMainWindow();
@@ -100,6 +120,7 @@ namespace ClaudeAutoResponse
 
         private void ExitApplication()
         {
+            _rdrService?.Dispose();
             _monitorService?.Dispose();
             _hotkeyService?.UnregisterHotkeys();
             _trayIcon?.Dispose();
@@ -109,6 +130,7 @@ namespace ClaudeAutoResponse
 
         protected override void OnExit(ExitEventArgs e)
         {
+            _rdrService?.Dispose();
             _monitorService?.Dispose();
             _hotkeyService?.UnregisterHotkeys();
             _trayIcon?.Dispose();
