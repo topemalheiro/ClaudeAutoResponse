@@ -1,0 +1,62 @@
+{
+  "complexity": "simple",
+  "workflow_type": "simple",
+  "confidence": 0.98,
+  "reasoning": "This is a deliberate test/verification task with explicit instructions to do minimal work. No real feature implementation, no code changes, no infrastructure - just workflow state transitions to test auto-shutdown detection.",
+
+  "analysis": {
+    "scope": {
+      "estimated_files": 0,
+      "estimated_services": 0,
+      "is_cross_cutting": false,
+      "notes": "No actual code changes required - this is a workflow state test only"
+    },
+    "integrations": {
+      "external_services": [],
+      "new_dependencies": [],
+      "research_needed": false,
+      "notes": "No integrations - testing internal orchestrator behavior"
+    },
+    "infrastructure": {
+      "docker_changes": false,
+      "database_changes": false,
+      "config_changes": false,
+      "notes": "No infrastructure changes - this tests the Auto-Claude orchestrator's shutdown detection"
+    },
+    "knowledge": {
+      "patterns_exist": true,
+      "research_required": false,
+      "unfamiliar_tech": [],
+      "notes": "This is a meta-task to validate recent auto-shutdown fixes (2026-02-08)"
+    },
+    "risk": {
+      "level": "trivial",
+      "concerns": [],
+      "notes": "Zero risk - no production code is touched. Only tests orchestrator state machine."
+    }
+  },
+
+  "recommended_phases": [
+    "discovery",
+    "quick_spec",
+    "validation"
+  ],
+
+  "flags": {
+    "needs_research": false,
+    "needs_self_critique": false,
+    "needs_infrastructure_setup": false
+  },
+
+  "validation_recommendations": {
+    "risk_level": "trivial",
+    "skip_validation": true,
+    "minimal_mode": true,
+    "test_types_required": [],
+    "security_scan_required": false,
+    "staging_deployment_required": false,
+    "reasoning": "This is a meta-test for orchestrator behavior, not a real feature. No functional code is modified. The 'implementation' is just marking subtasks complete and transitioning to terminal status."
+  },
+
+  "created_at": "2026-02-08T00:00:00Z"
+}

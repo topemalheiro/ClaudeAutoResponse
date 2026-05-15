@@ -1,0 +1,57 @@
+{
+  "name": "claude-auto-response",
+  "displayName": "Claude Auto-Response",
+  "description": "Auto-approves Claude Code permission prompts in terminal",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "enabledApiProposals": ["terminalDataWriteEvent"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeAutoResponse.enable",
+        "title": "Claude Auto-Response: Enable"
+      },
+      {
+        "command": "claudeAutoResponse.disable",
+        "title": "Claude Auto-Response: Disable"
+      },
+      {
+        "command": "claudeAutoResponse.status",
+        "title": "Claude Auto-Response: Show Status"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Auto-Response",
+      "properties": {
+        "claudeAutoResponse.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic response to Claude Code permission prompts"
+        },
+        "claudeAutoResponse.responseDelay": {
+          "type": "number",
+          "default": 100,
+          "description": "Delay in ms before sending response (to ensure prompt is ready)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  }
+}
